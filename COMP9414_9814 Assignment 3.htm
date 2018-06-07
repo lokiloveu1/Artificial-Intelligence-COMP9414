@@ -1,0 +1,344 @@
+<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML 2.0//EN">
+<HTML>
+<HEAD>
+<TITLE>COMP9414/9814 Assignment 3</TITLE>
+</HEAD>
+<BODY LANG="EN">
+<h2 align=center>COMP9414/9814 Artificial Intelligence</h2>
+<h2 align=center>Session 1, 2018</h2>
+<h3 align=center>Project 3, Option 2: Prolog (BDI Agent)</h3>
+<p align=center>
+Due: Sunday 3 June, 11:59 pm
+<br align=center>
+Marks: 18% of final assessment
+
+<h4>Introduction</h4>
+
+In this Assignment, you will be implementing an agent to move around
+in a rectangular environment, picking up stones from the land
+and dropping them in the water, thus building a path to the location
+of a dangerous sea monster. The final stone must be dropped on the
+head of the sea monster in order to kill it.
+<p>
+In doing this assignment, you will implement the basic functions of a simple
+BDI Agent that operates in a Gridworld, and learn about
+the ideas underlying BDI agents.
+
+<h4>Gridworld</h4>
+
+The Gridworld consists of a two-dimensional grid of locations,
+extending to infinity in both directions.
+Some locations are specified as being on land, while the others
+are assumed to be water.
+In the first round of the simulation,
+the agent must construct a minimal list of locations
+in which stepping stones need to be dropped, in order
+to create a path to the location of the monster.
+In subsequent rounds, stones will appear randomly
+at certain locations. The agent is able to move to a place
+where a stone is located and execute a <code>pick</code> action.
+It can then move to one of the pre-computed drop locations
+and execute a <code>drop</code> action.
+The agent can stay where it is, or move one square at a time,
+either horizontally or vertically. The world is dynamic in that
+stones can appear spontaneously at random locations at any time.
+<p>
+The supplied Prolog program <code>gridworld.pl</code> implements a system for conducting an
+experimental trial consisting of an agent in the Gridworld that
+repeatedly executes the BDI interpretation cycle for 100 iterations
+(you may like to reduce this number while debugging your program).
+The initial state of the world is always that there are
+no stones, and the agent is at location <code>(1,1)</code>
+holding no stones.
+<p>
+The agent's <i>goals</i> at any time are in the form
+<code>[goal(X<sub>1</sub>,Y<sub>1</sub>), ... , goal(X<sub>n</sub>,Y<sub>n</sub>)]</code>
+where <code>(X<sub>1</sub>,Y<sub>1</sub>), ... , (X<sub>n</sub>,Y<sub>n</sub>)</code>
+are locations where stones can be picked up.
+<p>
+The agent's <i>intentions</i> are in the form
+<code>intents(Intents_drop,Intents_pick)</code>
+where <code>Intents_drop</code> and <code>Intents_pick</code>
+each consist of a list of pairs of the form
+<code>[goal(X,Y), Plan]</code>,
+representing a goal with an associated plan
+(which may be the empty plan), ordered according to some priority.
+<p>
+Each plan is a list of actions. To fulfil an intention, the agent
+executes the plan associated with its goal, which will make the agent
+move along a path towards the goal and then either
+<code>pick</code> or <code>drop</code> a stone.
+If, when the agent chooses an intention to fulfil,
+the plan associated with the goal of that intention
+is empty or cannot be executed, the agent creates a new plan for the
+goal and then begins to execute this plan.
+<p>
+In each cycle the agent executes one action. There are three types
+of action the agent can execute:
+<p>
+&nbsp;&nbsp;&nbsp;<code>move(X,Y)</code> - the agent moves to location <code>(X,Y)</code><br>
+&nbsp;&nbsp;&nbsp;<code>pick(X,Y)</code> - the agent picks up the stone at <code>(X,Y)</code><br>
+&nbsp;&nbsp;&nbsp;<code>drop(X,Y)</code> - the agent drops a stone at <code>(X,Y)</code>
+<p>
+&nbsp;&nbsp;&nbsp;<code>move(X,Y)</code> can be executed when the Manhattan distance
+from the agent's current location to <code>(X,Y)</code> is either 0 or 1,
+and
+<code>land_or_dropped(X,Y)</code> is <code>true</code>.<br>
+&nbsp;&nbsp;&nbsp;<code>pick(X,Y)</code> can be executed if the Manhattan distance
+from the agent's current location to <code>(X,Y)</code> is exactly 1,
+<code>have_stones(0)</code> is <code>true</code>
+and <code>stone_at(X,Y)</code> is <code>true</code>.<br>
+&nbsp;&nbsp;&nbsp;<code>drop(X,Y)</code>
+can be executed if the Manhattan distance
+from the agent's current location to <code>(X,Y)</code> is exactly 1,
+<code>have_stones(1)</code> is <code>true</code>
+and <code>land_or_dropped(X,Y)</code> is <code>false</code>.
+<p>
+<h4>BDI Interpreter</h4>
+<p>
+
+In each time cycle, the agent executes the interpreter shown
+abstractly in the table below.
+The new external events on each cycle
+are represented as a list of terms of the form
+<code>stone(X,Y)</code>,
+within some viewing distance of the agent. 
+The agent will repeatedly perceive any stone
+so long as it remains in viewing range. It is not
+assumed that the agent can see all of the grid, so a new external
+event may occur as the agent is moving towards another target.
+Each new perceived event <code>stone(X,Y)</code>
+should trigger a goal for the agent, represented as a term of the form
+<code>goal(X,Y)</code>.
+Any new goal is
+incorporated into the agent's current intentions according to the
+agent's prioritization strategy (see below). The agent then selects
+one action for execution from the current set of intentions. Here the
+agent always selects the first intention on the list if there is one,
+creates or modifies the associated plan if necessary, then selects the
+first action in that plan, removes the selected action from the chosen
+plan, executes the action, and updates the list of intentions by
+removing any successfully achieved goals.
+<p>
+<center>
+<table frame="box">
+<tr><td><b>Abstract BDI Interpreter:</b></th></tr>
+<tr><td>&nbsp;&nbsp;initialize-state();</td></tr>
+<tr><td>&nbsp;&nbsp;<b>do</b></td></tr>
+<tr><td>&nbsp;&nbsp;&nbsp;&nbsp;Percepts = get_new_external_events();</td></tr>
+<tr><td>&nbsp;&nbsp;&nbsp;&nbsp;G = trigger(Percepts);</td></tr>
+<tr><td>&nbsp;&nbsp;&nbsp;&nbsp;I = incorporate_goals(G, B, I);</td></tr>
+<tr><td>&nbsp;&nbsp;&nbsp;&nbsp;(I, A) = get_action(B, I);</td></tr>
+<tr><td>&nbsp;&nbsp;&nbsp;&nbsp;execute(A);</td></tr>
+<tr><td>&nbsp;&nbsp;&nbsp;&nbsp;Observation = observe(A);</td></tr>
+<tr><td>&nbsp;&nbsp;&nbsp;&nbsp;B = update_beliefs(Observation);</td></tr>
+<tr><td>&nbsp;&nbsp;&nbsp;&nbsp;I = update_intentions(Observation);</td></tr>
+<tr><td>&nbsp;&nbsp;<b>until</b> quit</td></tr>
+</table>
+</center>
+<p>
+The agent maintains separate lists of <code>drop</code> and
+<code>pick</code> intentions.
+Within each list, its prioritization strategy is very simple:
+without reordering
+existing goals, each new goal is inserted into the list of intentions
+in order of distance from the
+current position (closer before further away). This means the agent
+maintains a "commitment" to pursuing its goals (the agent only
+changes its intention to pick up a stone if new stone
+appears at a closer location.
+<p>
+<h4>Assignment</h4>
+<p>
+You are supplied with a Prolog program in a file
+<a href="./gridworld.pl"><code>gridworld.pl</code></a>
+that implements the experimental setup, including the generation of events
+(appearance of stones)
+and the execution of actions, and the agent's BDI
+interpretation cycle and observation functions.
+<p>
+When executed, the run command loads a file
+<a href="./land.pl"><code>land.pl</code></a>
+containing the location of the monster in the form
+<code>monster(X,Y)</code>,
+and a list of locations which are on land in the form
+<code>land(X,Y)</code>.
+The current location of the agent is specified by a dynamic predicate
+<code>agent_at(X,Y)</code>.
+<p>
+[4 marks] Write a Prolog procedure
+<p>
+<code>initial_intentions(Intentions)</code>
+<p>
+which binds <code>Intentions</code> to <code>intents(L,[])</code>
+with <code>L</code> in the form
+<code>[[goal(X<sub>1</sub>,Y<sub>1</sub>),[]], ... , [goal(X<sub>n</sub>,Y<sub>n</sub>),[]]]</code>.
+Here
+<code>(X<sub>n</sub>,Y<sub>n</sub>)</code> is the location of the monster and
+<code>(X<sub>1</sub>,Y<sub>1</sub>)</code>, ... , <code>(X<sub>n-1</sub>,Y<sub>n-1</sub>)</code>
+are places where the mininum number of stones need to be dropped in order to
+allow the agent to move along some path from its current location to
+that of the monster.
+<p>
+[1 mark] Write a Prolog procedure
+<p>
+<code>trigger(Percepts, Goals)</code>
+<p>
+which takes a list of percepts, each of the form
+<code>stone(X,Y)</code>,
+and converts it into a corresponding list of goals, each of the form
+<code>goal(X,Y)</code>.
+<p>
+[4 marks] Write a Prolog procedure
+<p>
+<code>incorporate_goals(Goals, Intentions, Intentions1)</code>
+<p>
+This procedure should take two inputs, as follows:
+<ol type="1">
+<li>
+a set of <code>Goals</code> in the form of a list
+<code>[goal(X<sub>1</sub>,Y<sub>1</sub>), ... , goal(X<sub>n</sub>,Y<sub>n</sub>)]</code>
+<li> the current <code>Intentions</code> of the agent, in the form
+<code>intents(Int_drop,Int_pick)</code>
+where <code>Int_drop</code>, <code>Int_pick</code> are lists
+of intentions in the form <code>[goal(X,Y), Plan]</code>
+</ol>
+<p>
+Your procedure should return the updated
+<code>Intentions</code> of the agent
+after inserting the new goals into
+<code>Int_pick</code>.
+The new goals should be inserted into the
+existing list in decreasing order of
+the length of the shortest valid path from the agent's current position.
+A valid path is one which passes through only locations
+<code>(X,Y)</code> for which <code>land_or_dropped(X,Y)</code> is true.
+More precisely, a new goal
+should be placed immediately before the first goal in the list whose
+path length is longer than that of the new goal
+(without reordering the current list of goals).
+If no such valid path exists, then the new goal should not be inserted.
+Note that because of repeated perception of the same event,
+only goals not already in the list should be inserted into the list of
+intentions.
+The
+<code>Plan</code> associated with each new goal should be the empty plan
+(represented as the empty list <code>[]</code>).
+<p>
+[4 marks] Write a Prolog procedure
+<p>
+<code>get_action(Intentions, Intentions1, Action)</code><br>
+<p>
+which takes the agent's current
+<code>Intentions</code> in the form
+<code>intents(Int_drop,Int_pick)</code> (as described above)
+and computes an action to be taken by the agent as well as the
+updated <code>Intentions</code>.
+The agent should select an intention as follows:
+<p>
+<ul>
+<li> If the agent is currently holding a stone,
+indicated by <code>agent_stones(1)</code>,
+then the first intention
+<code>[goal(X,Y), Plan]</code> in the list
+<code>Int_drop</code> of dropping intentions is selected;
+<li> otherwise, if the list <code>Int_pick</code>
+of picking intentions is not empty, then its first item
+<code>[goal(X,Y), Plan]</code> is selected;
+<li> otherwise, no intention is selected;
+in this case, the agent's <code>Intentions</code> should remain as they are,
+and it should stay in its current location (i.e. action is
+<code>move(X,Y)</code> if it is currently at <code>(X,Y)</code>).
+</ul>
+The file <code>gridworld.pl</code> includes an
+<code>applicable()</code> predicate for testing
+whether an action is applicable.
+If the first action in the selected plan is applicable,
+the agent selects this action and updates the plan
+to remove the selected action. If there is no associated plan
+(i.e. the plan is the empty list) or the first action in the plan for
+the selected intention is not applicable in the current state,
+the agent should construct a new plan to go from its current position
+to the goal location and then either pick or drop a stone at that location.
+The plan will be a list of <code>move</code> actions 
+followed by either a <code>pick</code> or <code>drop</code> action.
+The agent should then select the first action in
+this new plan, and update the list of intentions to incorporate the
+new plan (minus the selected first action).
+<p>
+[1 mark] Write a Prolog procedure
+<p>
+<code>update_intentions(Observation, Intentions, Intentions1)</code>
+<p>
+to update the agent's intentions, based on observation.
+An <code>at(X,Y)</code> observation should not change the agent's intentions.
+In the case of a <code>picked()</code> or <code>dropped()</code> observation,
+the agent should remove the corresponding plan from its list of
+intentions (since this plan has now successfully been executed).
+<p>
+There are 4 marks allocated for comments and programming style.
+<p>
+In general, a program that attempts a substantial
+part of the job but does that part correctly
+will receive more marks than one attempting to do
+the entire job but with many errors.
+<p>
+You can see an example of the output of a trial run by clicking
+<a href="./trial.txt">here</a>.
+Note that <code>goal(9,2)</code> is not inserted into the list of Intentions
+until after a stone has been dropped at <code>(5,3)</code> in Cycle 8
+(thus greating a viable path).
+At Cycle 38, the agent abandons its Plan for <code>goal(2,3)</code>
+and instead gives priority to the new stone that
+just appeared at <code>(3,7)</code>.
+<p>
+
+<h4>Path Search Code</h4>
+<p>
+For this assignment, you are free to copy any of the path search code supplied for
+Assignment 2, and adapt it for the current task.
+You might find <code>pathsearch.pl</code> and
+<code>ucsdijkstra.pl</code> particularly useful.
+
+<h4>Submission</h4>
+<p>
+Submit one file called <code>agent.pl</code> using the command
+<pre>
+give cs9414 hw3prolog agent.pl
+</pre>
+Your solution should work with the supplied file
+<code><a href="./gridworld.pl">gridworld.pl</a></code>.
+<b>Do not change any of the procedures in this file and do not include
+the code from this file with your submission.</b>
+<p>
+The submission deadline is Sunday 3 June, 11:59 pm.<br>
+15% penalty will be applied to the (maximum) mark
+for every 24 hours late after the deadline.
+<p>
+Questions relating to the project can be posted to the
+Forums on the course Web site.
+<p>
+If you have a question that has not already been answered on
+the Forum, you can email it to
+<code>blair@cse.unsw.edu.au</code>
+<p>
+<h4>Plagiarism Policy</h4>
+<p>
+Your program must be entirely your own work.
+Plagiarism detection software will be used to compare all submissions pairwise
+(including submissions for any similar projects from previous years)
+and serious penalties will be applied, particularly in the case
+of repeat offences.
+<p>
+<b>DO NOT COPY FROM OTHERS; DO NOT ALLOW ANYONE TO SEE YOUR CODE</b>
+<p>
+Please refer to the
+<a href="https://student.unsw.edu.au/plagiarism">UNSW Policy on Academic Honesty and Plagiarism</a>
+if you require further clarification on this matter.
+<P>
+<P>
+Good luck!
+<br>
+<hr>
+</BODY>
+</HTML>
